@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  devtutorialvpc:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::VPC
+    Properties:
+      
+      CidrBlock: 10.20.0.0/16
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-vpc
+
+  devtutorialprivsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-2a
+      VpcId:
+        Ref: devtutorialvpc
+      CidrBlock: 10.20.0.0/24
+      MapPublicIpOnLaunch: false 
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-privsubnet
+  devtutorialprivroutetableprivsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: devtutorialvpc
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-privroutetable-privsubnet
+  devtutorialassprivrouteprivroutetableprivsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: devtutorialprivsubnet
+      RouteTableId:
+        Ref: devtutorialprivroutetableprivsubnet
+
+    #EC2 Instances and SG
+  devtutorialsg:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH and All ICMP Ipv4
+      VpcId:
+        Ref: devtutorialvpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp #Regla para SSH
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: icmp #Regla para ping
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.10.0.0/16
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-sg
+  devtutorialinstance:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-03f38e546e3dc59e1 #El ami id de amazon linux cambia entre regiones
+      InstanceType: t2.micro
+      KeyName: miatechdeveast2
+      PrivateIpAddress: "10.20.0.15"
+      SubnetId:
+        Ref: devtutorialprivsubnet
+      SecurityGroupIds:
+        - Ref: devtutorialsg
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-instance
+  devtutorialpeeringroutepubroutetablepubsubnet: #Registro en la route table
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: devtutorialprivroutetableprivsubnet
+      DestinationCidrBlock: 10.10.0.0/16
+      VpcPeeringConnectionId: pcx-0695e368ef4f5653e
+
+  

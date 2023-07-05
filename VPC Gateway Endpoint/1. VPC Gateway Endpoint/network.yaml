@@ -1,0 +1,160 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  devtutorialvpc:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::VPC
+    Properties:
+      
+      CidrBlock: 10.10.0.0/16
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-vpc
+  devtutorialigw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+          - Key: Name
+            Value: dev-tutorial-igw
+  devtutorialagw:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: devtutorialvpc
+      InternetGatewayId:
+        Ref: devtutorialigw
+
+  devtutorialpubsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-2a
+      VpcId:
+        Ref: devtutorialvpc
+      CidrBlock: 10.10.0.0/24
+      MapPublicIpOnLaunch: true #Con esto, se asigna automaticamente una ip publica a las instancias levantadas en esta subnet de manera automatica
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-pubsubnet
+  devtutorialpubroutetablepubsubnet: #Route Table
+    DeletionPolicy: Delete
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: devtutorialvpc
+      Tags:
+          - Key: Name
+            Value: dev-tutorial-pubroutetable-pubsubnet
+  devtutorialigwroutepubroutetablepubsubnet: #Registro en la route table
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Route
+    DependsOn: devtutorialagw
+    Properties:
+      RouteTableId:
+        Ref: devtutorialpubroutetablepubsubnet
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: devtutorialigw
+  devtutorialassigwroutepubroutetablepubsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: devtutorialpubsubnet
+      RouteTableId:
+        Ref: devtutorialpubroutetablepubsubnet
+
+  devtutorialprivsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-2b
+      VpcId:
+        Ref: devtutorialvpc
+      CidrBlock: 10.10.1.0/24
+      MapPublicIpOnLaunch: false 
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-privsubnet
+  devtutorialprivroutetableprivsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: devtutorialvpc
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-privroutetable-privsubnet
+  devtutorialassprivrouteprivroutetableprivsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: devtutorialprivsubnet
+      RouteTableId:
+        Ref: devtutorialprivroutetableprivsubnet
+
+    #EC2 Instances and SG
+  devtutorialsg:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH and All ICMP Ipv4
+      VpcId:
+        Ref: devtutorialvpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp #Regla para SSH
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-sg
+  devtutorialinstancebastion:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-03f38e546e3dc59e1 #El ami id de amazon linux cambia entre regiones
+      InstanceType: t2.micro
+      KeyName: miatechdeveast2
+      PrivateIpAddress: "10.10.0.11"
+      SubnetId:
+        Ref: devtutorialpubsubnet
+      SecurityGroupIds:
+        - Ref: devtutorialsg
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-instance-bastion
+  devtutorialinstancepriv:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-03f38e546e3dc59e1 #El ami id de amazon linux cambia entre regiones
+      InstanceType: t2.micro
+      KeyName: miatechdeveast2
+      PrivateIpAddress: "10.10.1.11"
+      IamInstanceProfile: Custom_S3_FullAccess  #role para acceso a s3
+      SubnetId:
+        Ref: devtutorialprivsubnet
+      SecurityGroupIds:
+        - Ref: devtutorialsg
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-instance-private
+  #bucket
+  devtutorialbucket:
+    DeletionPolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: dev-tutorial-bucket001
+      AccessControl: Private
+  #VPC Gateway Endpoint
+  devtutorialvpcgatewayendpoint:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: 
+        Ref: devtutorialvpc
+      ServiceName: com.amazonaws.us-east-2.s3
+      RouteTableIds:
+        - Ref: devtutorialprivroutetableprivsubnet

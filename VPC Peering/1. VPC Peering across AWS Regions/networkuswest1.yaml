@@ -1,0 +1,118 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+#
+  devtutorialvpc:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.10.0.0/16
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-vpc
+  devtutorialigw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+          - Key: Name
+            Value: dev-tutorial-igw
+  devtutorialagw:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: devtutorialvpc
+      InternetGatewayId:
+        Ref: devtutorialigw
+  devtutorialpubsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-west-1a
+      VpcId:
+        Ref: devtutorialvpc
+      CidrBlock: 10.10.0.0/24
+      MapPublicIpOnLaunch: true #Con esto, se asigna automaticamente una ip publica a las instancias levantadas en esta subnet de manera automatica
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-pubsubnet
+  devtutorialpubroutetablepubsubnet: #Route Table
+    DeletionPolicy: Delete
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: devtutorialvpc
+      Tags:
+          - Key: Name
+            Value: dev-tutorial-pubroutetable-pubsubnet
+  devtutorialpubroutepubroutetablepubsubnet: #Registro en la route table
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Route
+    DependsOn: devtutorialagw
+    Properties:
+      RouteTableId:
+        Ref: devtutorialpubroutetablepubsubnet
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: devtutorialigw
+  devtutorialasspubroutepubroutetablepubsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: devtutorialpubsubnet
+      RouteTableId:
+        Ref: devtutorialpubroutetablepubsubnet
+  #EC2 Instances and SG
+  devtutorialsg:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH and All ICMP Ipv4
+      VpcId:
+        Ref: devtutorialvpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp #Regla para SSH
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: icmp #Regla para ping
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.20.0.0/16
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-sg
+  devtutorialinstance:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-04ceee5659211731a #El ami id de amazon linux cambia entre regiones
+      InstanceType: t2.micro
+      KeyName: dev
+      PrivateIpAddress: "10.10.0.11"
+      SubnetId:
+        Ref: devtutorialpubsubnet
+      SecurityGroupIds:
+        - Ref: devtutorialsg
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-instance
+
+  devtutorialvpcpeeringconnection: #Por default trae la cuenta desde donde se lanza la peticion, en caso de que sea otra cuenta se debe especificar
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties:
+      PeerRegion: us-east-2
+      VpcId: 
+        Ref: devtutorialvpc
+      PeerVpcId: vpc-09fa87cc7224883ba #VPC ID de la otra region
+  #Ruta hacia la peeering connection
+  devtutorialpeeringroutepubroutetablepubsubnet: #Registro en la route table
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Route
+    DependsOn: devtutorialagw
+    Properties:
+      RouteTableId:
+        Ref: devtutorialpubroutetablepubsubnet
+      DestinationCidrBlock: 10.20.0.0/16
+      VpcPeeringConnectionId:
+        Ref: devtutorialvpcpeeringconnection

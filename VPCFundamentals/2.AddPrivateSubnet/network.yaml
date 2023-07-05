@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  MyVPCCF:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::VPC
+    Properties:
+      
+      CidrBlock: 10.100.0.0/16
+      Tags:
+        - Key: Name
+          Value: MyVPCCF
+  MyInternetGatewayCF:
+    Type: AWS::EC2::InternetGateway
+  AttachGateway:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: MyVPCCF
+      InternetGatewayId:
+        Ref: MyInternetGatewayCF
+  MyPublicSubnetCF:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-2a
+      VpcId:
+        Ref: MyVPCCF
+      CidrBlock: 10.100.0.0/24
+      MapPublicIpOnLaunch: true #Con esto, se asigna automaticamente una ip publica a las instancias levantadas en esta subnet de manera automatica
+      Tags:
+        - Key: Name
+          Value: MyPublicSubnetCF
+  MyPublicRouteTableCF: #Route Table
+    DeletionPolicy: Delete
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: MyVPCCF
+  PublicRouteCF: #Registro en la route table
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId:
+        Ref: MyPublicRouteTableCF
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: MyInternetGatewayCF
+  AssociatePublicRouteTableCF:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: MyPublicSubnetCF
+      RouteTableId:
+        Ref: MyPublicRouteTableCF
+  MyPrivateSubnetCF:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-2b
+      VpcId:
+        Ref: MyVPCCF
+      CidrBlock: 10.100.1.0/24
+      MapPublicIpOnLaunch: false #Con esto, se asigna automaticamente una ip publica, como se setea en false, esto es lo que vuelve a la subnet privada
+      Tags:
+        - Key: Name
+          Value: MyPrivateSubnetCF
+  MyPrivateRouteTableCF:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: MyVPCCF
+  AssociatePrivateRouteTableCF:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: MyPrivateSubnetCF
+      RouteTableId:
+        Ref: MyPrivateRouteTableCF
+  

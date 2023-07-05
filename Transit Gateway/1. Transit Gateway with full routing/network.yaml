@@ -1,0 +1,380 @@
+##########################VPC A Consumer###########################
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  devtutorialvpc:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-vpc-a
+  devtutorialtg:
+    Type: 'AWS::EC2::TransitGateway'
+    Properties:
+      AmazonSideAsn: 64512
+      Description: Transit Gateway principal
+      AutoAcceptSharedAttachments: enable
+      DefaultRouteTableAssociation: enable
+      DefaultRouteTablePropagation: enable
+      DnsSupport: enable
+      VpnEcmpSupport: enable #Equal Costo Multipath Routing (ECMP) permite que el tráfico de VPN se enrute a través de múltiples túneles VPN de sitio a sitio para proporcionar redundancia y aumentar el ancho de banda disponible.
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-tg
+  devtutorialigw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+          - Key: Name
+            Value: dev-tutorial-igw
+  devtutorialagw:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: devtutorialvpc
+      InternetGatewayId:
+        Ref: devtutorialigw
+
+  devtutorialpubsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-2a
+      VpcId:
+        Ref: devtutorialvpc
+      CidrBlock: 10.0.0.0/24
+      MapPublicIpOnLaunch: true #Con esto, se asigna automaticamente una ip publica a las instancias levantadas en esta subnet de manera automatica
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-pubsubnet-a
+  devtutorialpubroutetablepubsubnet: #Route Table
+    DeletionPolicy: Delete
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: devtutorialvpc
+      Tags:
+          - Key: Name
+            Value: dev-tutorial-pubroutetable-pubsubnet-a
+  devtutorialigwroutepubroutetablepubsubnet: #Registro en la route table
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Route
+    DependsOn: devtutorialagw
+    Properties:
+      RouteTableId:
+        Ref: devtutorialpubroutetablepubsubnet
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: devtutorialigw
+  devtutorialassigwroutepubroutetablepubsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: devtutorialpubsubnet
+      RouteTableId:
+        Ref: devtutorialpubroutetablepubsubnet
+
+  devtutorialprivsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-2b
+      VpcId:
+        Ref: devtutorialvpc
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: false 
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-privsubnet
+  devtutorialprivroutetableprivsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: devtutorialvpc
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-privroutetable-privsubnet-a
+  devtutorialassprivrouteprivroutetableprivsubnet:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: devtutorialprivsubnet
+      RouteTableId:
+        Ref: devtutorialprivroutetableprivsubnet
+  devtutorialitwrouteprivroutetableprivsubnet: #Registro en la route table privada para la TG
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: devtutorialprivroutetableprivsubnet
+      DestinationCidrBlock: 10.0.0.0/8
+      TransitGatewayId:
+        Ref: devtutorialtg
+    # EC2 Instances and SG
+  devtutorialsg:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH 
+      VpcId:
+        Ref: devtutorialvpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp #Regla para SSH
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-sg-a
+  devtutorialinstancebastion:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-03f38e546e3dc59e1 #El ami id de amazon linux cambia entre regiones
+      InstanceType: t2.micro
+      KeyName: miatechdeveast2
+      PrivateIpAddress: "10.0.0.10"
+      SubnetId:
+        Ref: devtutorialpubsubnet
+      SecurityGroupIds:
+        - Ref: devtutorialsg
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-instance-bastion
+  devtutorialinstancepriv:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-03f38e546e3dc59e1 #El ami id de amazon linux cambia entre regiones
+      InstanceType: t2.micro
+      KeyName: miatechdeveast2
+      PrivateIpAddress: "10.0.1.10"
+      SubnetId:
+        Ref: devtutorialprivsubnet
+      SecurityGroupIds:
+        - Ref: devtutorialsg
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-instance-private
+#TGAttachment
+  devtutorialattachmentvpna:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      TransitGatewayId: 
+        Ref: devtutorialtg
+      VpcId: 
+        Ref: devtutorialvpc
+      SubnetIds: 
+        - Ref: devtutorialprivsubnet
+      Options:
+        DnsSupport: enable
+
+##################VPC B################################
+  devtutorialvpcb:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      CidrBlock: 10.1.0.0/16
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-vpc-b
+
+  devtutorialprivsubnetb:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-2a
+      VpcId:
+        Ref: devtutorialvpcb
+      CidrBlock: 10.1.0.0/24
+      MapPublicIpOnLaunch: false 
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-privsubneta
+  devtutorialprivroutetableprivsubnetb:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: devtutorialvpcb
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-privroutetable-privsubnet-b
+  devtutorialassprivrouteprivroutetableprivsubnetb:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: devtutorialprivsubnetb
+      RouteTableId:
+        Ref: devtutorialprivroutetableprivsubnetb
+  
+  devtutorialitwrouteprivroutetableprivsubnetb: #Registro en la route table privada para la TG
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: devtutorialprivroutetableprivsubnetb
+      DestinationCidrBlock: 10.0.0.0/8
+      TransitGatewayId:
+        Ref: devtutorialtg
+
+
+
+  #Ec2 Instances
+  devtutorialsgb:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Reglas de acceso SSH e ICMP
+      VpcId:
+        Ref: devtutorialvpcb
+      SecurityGroupIngress:
+        - IpProtocol: tcp #Regla para servidor
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: icmp #Regla para servidor
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.0.0.0/8
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-sg-b
+  devtutorialinstanceprivb:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-03f38e546e3dc59e1 
+      InstanceType: t2.micro
+      KeyName: miatechdeveast2
+      PrivateIpAddress: "10.1.0.10"
+      SubnetId:
+        Ref: devtutorialprivsubnetb
+      SecurityGroupIds:
+        - Ref: devtutorialsgb
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-priv-b
+
+  #TGAttachment
+  devtutorialattachmentvpnb:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      TransitGatewayId: 
+        Ref: devtutorialtg
+      VpcId: 
+        Ref: devtutorialvpcb
+      SubnetIds: 
+        - Ref: devtutorialprivsubnetb
+      Options:
+        DnsSupport: enable
+
+        
+##################VPC C################################
+  devtutorialvpcc:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      CidrBlock: 10.2.0.0/16
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-vpc-c
+
+  devtutorialprivsubnetc:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-2a
+      VpcId:
+        Ref: devtutorialvpcc
+      CidrBlock: 10.2.0.0/24
+      MapPublicIpOnLaunch: false 
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-privsubnet-c
+  devtutorialprivroutetableprivsubnetc:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: devtutorialvpcc
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-privroutetable-privsubnet-c
+  devtutorialassprivrouteprivroutetableprivsubnetc:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: devtutorialprivsubnetc
+      RouteTableId:
+        Ref: devtutorialprivroutetableprivsubnetc
+
+  devtutorialitwrouteprivroutetableprivsubnetc: #Registro en la route table privada para la TG
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: devtutorialprivroutetableprivsubnetc
+      DestinationCidrBlock: 10.0.0.0/8
+      TransitGatewayId:
+        Ref: devtutorialtg
+  #Ec2 Instances
+  devtutorialsgc:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Reglas de acceso SSH e ICMP
+      VpcId:
+        Ref: devtutorialvpcc
+      SecurityGroupIngress:
+        - IpProtocol: tcp #Regla para servidor
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: icmp #Regla para servidor
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.0.0.0/8
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-sg-c
+  devtutorialinstanceprivc:
+    DeletionPolicy: Delete
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-03f38e546e3dc59e1 
+      InstanceType: t2.micro
+      KeyName: miatechdeveast2
+      PrivateIpAddress: "10.2.0.10"
+      SubnetId:
+        Ref: devtutorialprivsubnetc
+      SecurityGroupIds:
+        - Ref: devtutorialsgc
+      Tags:
+        - Key: Name
+          Value: dev-tutorial-priv-c
+  #TGAttachment
+  devtutorialattachmentvpnc:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      TransitGatewayId: 
+        Ref: devtutorialtg
+      VpcId: 
+        Ref: devtutorialvpcc
+      SubnetIds: 
+        - Ref: devtutorialprivsubnetc
+      Options:
+        DnsSupport: enable
